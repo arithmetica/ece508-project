@@ -9,7 +9,7 @@ resources:
   network: false
 commands:
   build_image:
-    image_name: rai/boost_ppc64le:8.0
+    image_name: hadi/boost_ppc64le:8.0
     dockerfile: "./Dockerfile"
   build:
     - g++ /src/dijkstra_example_cal.cpp -o dijkstra_boost
