@@ -1,0 +1,16 @@
+rai:
+  version: 0.2 # this is required
+resources:
+  cpu:
+    architecture: ppc64le
+  gpu: 
+    architecture: pascal
+    count: 1 # tell the system that you're using a gpu
+  network: false
+commands:
+  build_image:
+    image_name: hadi/lonestar_ppc64le:8.0.1
+    dockerfile: "./Dockerfile"
+  build:
+    - ls /home/lonestargpu-2.0
+    - /bin/sh -c 'cd /home/lonestargpu-2.0/apps/sssp/ && ./run' 

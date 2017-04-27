@@ -1,0 +1,26 @@
+rai:
+  version: 0.2 # this is required
+resources:
+  cpu:
+    architecture: ppc64le
+  gpu: 
+    architecture: pascal
+    count: 1 # tell the system that you're using a gpu
+  network: false
+commands:
+  build_image:
+    image_name: hadi/boost_ppc64le:8.0
+    dockerfile: "./Dockerfile"
+  build:
+    - g++ /src/dijkstra_example_cal.cpp -o dijkstra_boost
+    - ls 
+    - ./dijkstra_boost /src/USA-road-d.NY.gr.edited
+    # Use CMake to generate the build files. Remember that your directory gets uploaded to /src
+    # - cmake /src
+    # Run the make file to compile the project.
+    # - make
+    # here we break the long command into multiple lines. The Yaml
+    # format supports this using a block-strip command. See
+    # http://stackoverflow.com/a/21699210/3543720 for info
+    #- >-
+    #  ./mybinary -i input1,input2 -o output
