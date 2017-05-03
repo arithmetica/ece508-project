@@ -14,6 +14,6 @@ commands:
   build:
     - ls /home/lonestargpu-2.0 
     - /bin/sh -c 'cp /src/run-all.sh /home/lonestargpu-2.0/apps/sssp/run-all.sh'   
-    - /bin/sh -c 'cp /src/run /home/lonestargpu-2.0/apps/sssp/run'   
-    - /bin/sh -c 'cp /src/sssp_worklistc.h /home/lonestargpu-2.0/apps/sssp/sssp_worklistc.h && cd /home/lonestargpu-2.0 && make &&  cd apps/sssp/ && ./run' 
+    - /bin/sh -c 'cp /src/run /home/lonestargpu-2.0/apps/sssp/run'  
+    - /bin/sh -c 'cp /src/worklistc.h /home/lonestargpu-2.0/include/ && cp /src/sssp_worklistc.h /home/lonestargpu-2.0/apps/sssp/sssp_worklistc.h && cd /home/lonestargpu-2.0 && make &&  cd apps/sssp/ && ./run' 
 

@@ -4,7 +4,8 @@
 
 #define AVGDEGREE	2.5
 #define WORKPERTHREAD	1
-#define THRESHOLD 5
+#define THRESHOLD 10000
+#define DELTA 1000
 
 unsigned int NVERTICES;
 
@@ -35,7 +36,7 @@ void initialize(foru *dist, unsigned int nv) {
 }
 
 __device__
-foru processedge2(foru *dist, Graph &graph, unsigned iteration, unsigned src, unsigned edge, unsigned &dst) {
+foru processedge2(foru *dist, Graph &graph, unsigned iteration, unsigned src, unsigned edge, unsigned &dst, foru &altdist) {
   
   dst = tex1Dfetch(columns, edge);
   if (dst >= graph.nnodes) return 0;
@@ -44,7 +45,7 @@ foru processedge2(foru *dist, Graph &graph, unsigned iteration, unsigned src, un
   if (wt >= MYINFINITY) return 0;
 
   foru dstwt = cub::ThreadLoad<cub::LOAD_CG>(dist + dst);
-  foru altdist = cub::ThreadLoad<cub::LOAD_CG>(dist + src) + wt;  
+  altdist = cub::ThreadLoad<cub::LOAD_CG>(dist + src) + wt;  
 
   //printf("%d %d %d %d %d\n", src, dst, wt, dstwt, altdist);
 
@@ -62,7 +63,7 @@ foru processedge2(foru *dist, Graph &graph, unsigned iteration, unsigned src, un
   return 0;
 }
 
-
+/*
 __device__ void expandByCTA(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2 &outwl, unsigned iteration)
 {
   unsigned id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -120,7 +121,6 @@ __device__ void expandByCTA(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2
 	    {
 	      int ncnt = 0;
 	      unsigned to_push = 0;
-
 	      if(i < neighborsize)
 		if(processedge2(dist, graph, iteration, shnn, neighboroffset + i, to_push))
 		  {
@@ -133,7 +133,7 @@ __device__ void expandByCTA(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2
 
       id += gridDim.x * blockDim.x;
     }
-}
+}*/
 
 __device__
 unsigned processnode2(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2 &outwl1, Worklist2 &outwl2, unsigned iteration) 
@@ -196,12 +196,13 @@ unsigned processnode2(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2 &outw
 
 	  __syncthreads();
 
-	  int ncnt = 0;
-	  unsigned to_push = 0;
+	  int ncnt = 0, ncnt1 = 0, ncnt2 = 0;
+	  unsigned to_push = 0, to_push1=0, to_push2=0;
+	  foru altdist;
 
 	  if(threadIdx.x < total_edges)
 	    {
-	      if(processedge2(dist, graph, iteration, src[threadIdx.x], gather_offsets[threadIdx.x], to_push))
+	      if(processedge2(dist, graph, iteration, src[threadIdx.x], gather_offsets[threadIdx.x], to_push, altdist))
 		{
 		  ncnt = 1;
 		}
@@ -209,15 +210,83 @@ unsigned processnode2(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2 &outw
 
 	  //outwl.push_1item<BlockScan>(ncnt, (int) to_push, BLKSIZE);
 	  /*heidars2*/
+	    //printf("to_push:%d altdist:%d\n",to_push, altdist);
+	    int threshold = THRESHOLD + iteration*DELTA;
+	    if (altdist < threshold)
+	    {
+	    	to_push1 = to_push, to_push2 = -1;
+	    }
+	    else
+	    {
+	    	to_push1 = -1, to_push2 = to_push;
+	    }
 
-	  if (dist[to_push] < THRESHOLD){
-	  	printf("[INFO] Adding to outlist 1\n");
-	  	outwl1.push_1item<BlockScan>(ncnt, (int) to_push, BLKSIZE);
-	  }
-	  else{
-	  	printf("[INFO] Adding to outlist 2\n");
-	  	outwl2.push_1item<BlockScan>(ncnt, (int) to_push, BLKSIZE);
-	  }
+	    ncnt1 = to_push1 == -1 ? 0 : ncnt;
+	    ncnt2 = to_push2 == -1 ? 0 : ncnt;
+
+	  	outwl1.push_1item<BlockScan>(ncnt1, (int) to_push1, BLKSIZE);
+	  	//printf("[INFO] Adding %d to outlist 1, ncnt is %d, nitems is %d\n", to_push, ncnt, *outwl1.dindex);
+	  	outwl2.push_1item<BlockScan>(ncnt2, (int) to_push2, BLKSIZE);
+	  	//printf("[INFO] Adding %d to outlist 2, ncnt is %d, nitems is %d\n", to_push, ncnt, *outwl2.dindex);
+	  
+
+	  	/*
+	  	__shared__ BlockScan::TempStorage temp_storage_1;
+    		__shared__ int queue_index_1;
+    		int total_items_1 = 0;
+   			int thread_data_1 = ncnt;
+   			__shared__ int flag_1;
+   			int old_flag_1;
+
+   		__shared__ BlockScan::TempStorage temp_storage_2;
+    		__shared__ int queue_index_2;
+    		int total_items_2 = 0;
+   			int thread_data_2 = ncnt;
+   			printf("thread_data_2 is %d\n", thread_data_2);
+   			__shared__ int flag_2;
+   			int old_flag_2;
+
+
+
+	  	if (altdist < threshold)
+	  	{
+	  		
+   			BlockScan(temp_storage).ExclusiveSum(thread_data_1, thread_data_1, total_items_1);
+	  		old_flag_1 = atomicExch(&flag_1, 1); 
+	  		 if(old_flag_1 != 1)
+      		 {	
+	     		queue_index_1 = atomicAdd((int *) outwl1.dindex, total_items_1);
+       			printf("atomically added to outwl1.dindex is now %d, thread_data_1 was %d\n", *outwl1.dindex, ncnt);
+
+	     //printf("queueindex: %d %d %d %d %d\n", blockIdx.x, threadIdx.x, queue_index, thread_data + n_items, total_items);
+      		}
+	     		
+	  	} else
+	  	{
+	  		
+   			BlockScan(temp_storage).ExclusiveSum(thread_data_2, thread_data_2, total_items_2);
+	  		old_flag_2 = atomicExch(&flag_2, 1); 
+	  		 if(old_flag_2 != 1)
+      		 {	
+	     		queue_index_2 = atomicAdd((int *) outwl2.dindex, total_items_2);
+	     		printf("atomically added to outwl2.dindex is now %d, thread_data_2 was %d\n", *outwl2.dindex, thread_data_2);
+	     //printf("queueindex: %d %d %d %d %d\n", blockIdx.x, threadIdx.x, queue_index, thread_data + n_items, total_items);
+      		}
+
+	  	}
+    	__syncthreads();
+
+    
+    	if(ncnt == 1 && altdist < threshold)
+      	{
+	      	cub::ThreadStore<cub::STORE_CG>(outwl1.dwl + queue_index_1 + thread_data_1, (int) to_push);
+	     	
+      	}
+      	if(ncnt == 1 && altdist >= threshold){
+      		cub::ThreadStore<cub::STORE_CG>(outwl2.dwl + queue_index_2 + thread_data_2, (int) to_push);
+      	}
+      	*/
+
       
 	  total_edges -= BLKSIZE;
 	  done += BLKSIZE;
@@ -246,10 +315,12 @@ void drelax(foru *dist, Graph& graph, unsigned *gerrno, Worklist2 &inwl1, Workli
 	  }
 	else
 	  {
-	    if(processnode2(dist, graph, inwl1, outwl1, outwl2, iteration))
-	      *gerrno = 1;
-	  	if(processnode2(dist, graph, inwl2, outwl1, outwl2, iteration))
-	  	  *gerrno = 1;
+	    //if
+	    (processnode2(dist, graph, inwl1, outwl1, outwl2, iteration));
+	    //  *gerrno = 1;
+	  	//if
+	  	(processnode2(dist, graph, inwl2, outwl1, outwl2, iteration));
+	  	//  *gerrno = 1;
 	  }
 }
 
@@ -413,7 +484,7 @@ void sssp(foru *hdist, foru *dist, Graph &graph, unsigned long totalcomm)
 
 		outwl1->reset();
 		outwl2->reset();
-		printf("nitems:%d\n",nitems);
+		//printf("nitems:%d\n",nitems);
 	} while (nitems > 0);
 	CUDA_SAFE_CALL(cudaDeviceSynchronize());
 	endtime = rtclock();
