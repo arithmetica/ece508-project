@@ -4,8 +4,8 @@
 
 #define AVGDEGREE	2.5
 #define WORKPERTHREAD	1
-#define THRESHOLD 10000
-#define DELTA 1000
+//#define THRESHOLD 10000
+//#define DELTA 1000
 
 unsigned int NVERTICES;
 
@@ -137,7 +137,7 @@ __device__ void expandByCTA(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2
 }*/
 
 __device__
-unsigned processnode2(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2 &outwl1, Worklist2 &outwl2, unsigned iteration) 
+unsigned processnode2(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2 &outwl1, Worklist2 &outwl2, unsigned iteration, long unsigned base, long unsigned delta) 
 {
   //expandByCTA(dist, graph, inwl, outwl, iteration);
 
@@ -212,7 +212,7 @@ unsigned processnode2(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2 &outw
 	  //outwl.push_1item<BlockScan>(ncnt, (int) to_push, BLKSIZE);
 	  /*heidars2*/
 	    //printf("to_push:%d altdist:%d\n",to_push, altdist);
-	    int threshold = THRESHOLD + iteration*DELTA;
+	    int threshold = base + iteration*delta;
 	    if (altdist < threshold)
 	    {
 	    	to_push1 = to_push, to_push2 = -1;
@@ -301,7 +301,7 @@ unsigned processnode2(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2 &outw
 
 
 __device__
-void drelax(foru *dist, Graph& graph, unsigned *gerrno, Worklist2 &inwl1, Worklist2 &inwl2, Worklist2 &outwl1, Worklist2 &outwl2, int iteration) {
+void drelax(foru *dist, Graph& graph, unsigned *gerrno, Worklist2 &inwl1, Worklist2 &inwl2, Worklist2 &outwl1, Worklist2 &outwl2, int iteration, long unsigned base, long unsigned delta) {
 	unsigned id = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if(iteration == 0)
@@ -317,15 +317,15 @@ void drelax(foru *dist, Graph& graph, unsigned *gerrno, Worklist2 &inwl1, Workli
 	else
 	  {
 	    //if
-	    (processnode2(dist, graph, inwl1, outwl1, outwl2, iteration));
+	    (processnode2(dist, graph, inwl1, outwl1, outwl2, iteration, base, delta));
 	    //  *gerrno = 1;
 	  	//if
-	  	(processnode2(dist, graph, inwl2, outwl1, outwl2, iteration));
+	  	(processnode2(dist, graph, inwl2, outwl1, outwl2, iteration, base, delta));
 	  	//  *gerrno = 1;
 	  }
 }
 
-__global__ void drelax3(foru *dist, Graph graph, unsigned *gerrno, Worklist2 inwl1, Worklist2 inwl2, Worklist2 outwl1, Worklist2 outwl2, int iteration, GlobalBarrier gb)
+__global__ void drelax3(foru *dist, Graph graph, unsigned *gerrno, Worklist2 inwl1, Worklist2 inwl2, Worklist2 outwl1, Worklist2 outwl2, int iteration, GlobalBarrier gb, long unsigned base, long unsigned delta)
 {
   drelax(dist, graph, gerrno, inwl1, inwl2, outwl1, outwl2, iteration);
 }
@@ -450,7 +450,7 @@ void sssp(foru *hdist, foru *dist, Graph &graph, unsigned long totalcomm)
 	//printf("WL: 0 0, \n");
 
 	starttime = rtclock();
-	drelax3<<<1, BLKSIZE>>>(dist, graph, nerr, *inwl1, *inwl2, *outwl1, *outwl2, 0, gb);
+	drelax3<<<1, BLKSIZE>>>(dist, graph, nerr, *inwl1, *inwl2, *outwl1, *outwl2, 0, gb, base, delta);
 	unsigned int curr_edges_touched1 = 0;
 	unsigned int curr_edges_touched2 = 0;
 	unsigned long total_edges_touched = 0;
@@ -462,7 +462,7 @@ void sssp(foru *hdist, foru *dist, Graph &graph, unsigned long totalcomm)
 		//inwl->display_items();
 		//drelax2 <<<14, BLKSIZE>>> (dist, graph, nerr, *inwl, *outwl, dwp, gb);
 		
-		drelax3 <<<nblocks, BLKSIZE>>> (dist, graph, nerr, *inwl1, *inwl2, *outwl1, *outwl2, iteration, gb);
+		drelax3 <<<nblocks, BLKSIZE>>> (dist, graph, nerr, *inwl1, *inwl2, *outwl1, *outwl2, iteration, gb, base, delta);
 		nitems = outwl1->nitems() + outwl2->nitems();
 
 		remove_dups<<<14, 1024>>>(*outwl1, node_owners, gb);

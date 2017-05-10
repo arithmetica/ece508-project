@@ -14,7 +14,7 @@ do
 	#do
 	#INPUT_LABEL=`basename $INPUT`
 	echo '***1***'
-	./run-all.sh -psssp-output.txt -r1 -i $INPUT
+	./run-all.sh -psssp-output.txt -r1 -i $INPUT 10000 1000
 	#echo "RUNING Compare Script"
 	#echo "2"
 	../scripts/compare.sh sssp-wlc-${INPUT_LABEL}-sssp-output.txt sssp-*${INPUT_LABEL}-sssp-output.txt
