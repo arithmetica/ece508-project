@@ -1,9 +1,22 @@
 #!/bin/bash
 
-INPUT=${1:-../../inputs/USA-road-d.FLA.gr}
-INPUT_LABEL=`basename $INPUT`
+#INPUTS=${1:-../../inputs/USA-road-d.FLA.gr}
+INPUTS=()
+INPUTS+=('../../inputs/USA-road-d.FLA.gr')
+INPUTS+=('../../inputs/r4-2e23.gr')
+INPUTS+=('../../inputs/rmat22.gr')
+INPUTS+=('../../inputs/USA-road-d.USA.gr')
+INPUTS+=('../../inputs/2d-2e20.sym.gr')
 
-./run-all.sh -psssp-output.txt -r1 -i $INPUT
-echo "RUNING Compare Script"
-../scripts/compare.sh sssp-wlc-${INPUT_LABEL}-sssp-output.txt sssp-*${INPUT_LABEL}-sssp-output.txt
+for INPUT in ${INPUTS[@]}
+do
+	#for i in 1..10
+	#do
+	#INPUT_LABEL=`basename $INPUT`
+	echo '***1***'
+	./run-all.sh -psssp-output.txt -r1 -i $INPUT
+	#echo "RUNING Compare Script"
+	#echo "2"
+	../scripts/compare.sh sssp-wlc-${INPUT_LABEL}-sssp-output.txt sssp-*${INPUT_LABEL}-sssp-output.txt
+done
 

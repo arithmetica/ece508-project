@@ -34,7 +34,7 @@ void initialize(foru *dist, unsigned int nv) {
 }
 
 __device__
-foru processedge2(foru *dist, Graph &graph, unsigned iteration, unsigned src, unsigned edge, unsigned &dst) {
+foru processedge2(foru *dist, Graph &graph, unsigned iteration, unsigned src, unsigned edge, Worklist2 &inwl, unsigned &dst) {
   
   dst = tex1Dfetch(columns, edge);
   if (dst >= graph.nnodes) return 0;
@@ -49,6 +49,7 @@ foru processedge2(foru *dist, Graph &graph, unsigned iteration, unsigned src, un
 
   if(altdist < dstwt)
     {
+      atomicAdd(inwl.dedges_touched, (int) 1);
       atomicMin(&dist[dst], altdist);
       return 1;
 
@@ -121,7 +122,7 @@ __device__ void expandByCTA(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2
 	      unsigned to_push = 0;
 
 	      if(i < neighborsize)
-		if(processedge2(dist, graph, iteration, shnn, neighboroffset + i, to_push))
+		if(processedge2(dist, graph, iteration, shnn, neighboroffset + i, inwl, to_push))
 		  {
 		    ncnt = 1;
 		  }
@@ -138,6 +139,8 @@ __device__
 unsigned processnode2(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2 &outwl, unsigned iteration) 
 {
   //expandByCTA(dist, graph, inwl, outwl, iteration);
+  __shared__ int m_edges_touched[BLKSIZE];
+  __shared__ int edges_touched[BLKSIZE];
 
   unsigned id = blockIdx.x * blockDim.x + threadIdx.x;
   int nn;
@@ -200,7 +203,7 @@ unsigned processnode2(foru *dist, Graph &graph, Worklist2 &inwl, Worklist2 &outw
 
 	  if(threadIdx.x < total_edges)
 	    {
-	      if(processedge2(dist, graph, iteration, src[threadIdx.x], gather_offsets[threadIdx.x], to_push))
+	      if(processedge2(dist, graph, iteration, src[threadIdx.x], gather_offsets[threadIdx.x], inwl, to_push))
 		{
 		  ncnt = 1;
 		}
@@ -386,7 +389,7 @@ void sssp(foru *hdist, foru *dist, Graph &graph, unsigned long totalcomm)
 
 	CUDA_SAFE_CALL(cudaMalloc(&dwp, sizeof(hwp)));
 	CUDA_SAFE_CALL(cudaMemcpy(dwp, &hwp, sizeof(*dwp), cudaMemcpyHostToDevice));
-
+	CUDA_SAFE_CALL(cudaMemset(inwl->dedges_touched, 0, 1 * sizeof(unsigned int)));
 
 	cudaBindTexture(0, columns, graph.edgessrcdst, (graph.nedges + 1) * sizeof(int));
 	cudaBindTexture(0, row_offsets, graph.psrc, (graph.nnodes + 1) * sizeof(int));
@@ -407,6 +410,8 @@ void sssp(foru *hdist, foru *dist, Graph &graph, unsigned long totalcomm)
 
 	starttime = rtclock();
 	drelax3<<<1, BLKSIZE>>>(dist, graph, nerr, *inwl, *outwl, 0, gb);
+	unsigned int curr_edges_touched = 0;
+	unsigned long total_edges_touched = 0;
 
 	do {
 	        ++iteration;
@@ -420,6 +425,12 @@ void sssp(foru *hdist, foru *dist, Graph &graph, unsigned long totalcomm)
 		nitems = outwl->nitems();
 
 		remove_dups<<<14, 1024>>>(*outwl, node_owners, gb);
+
+		CUDA_SAFE_CALL(cudaMemcpy(&curr_edges_touched, inwl->dedges_touched, sizeof(unsigned int), cudaMemcpyDeviceToHost));
+
+		total_edges_touched += curr_edges_touched;
+
+		CUDA_SAFE_CALL(cudaMemset(inwl->dedges_touched, 0, 1 * sizeof(unsigned int)));
 		
 		//printf("%d\n", iteration);
 		//outwl->display_items();
@@ -432,10 +443,10 @@ void sssp(foru *hdist, foru *dist, Graph &graph, unsigned long totalcomm)
 
 		outwl->reset();
 	} while (nitems > 0);
+
+	printf("millions of edges touched: %.2f\n", (float) total_edges_touched / 1000000);
 	CUDA_SAFE_CALL(cudaDeviceSynchronize());
 	endtime = rtclock();
-
-	CUDA_SAFE_CALL(cudaMemcpy(&hwp, dwp, sizeof(hwp), cudaMemcpyDeviceToHost));
 
 	printf("\titerations = %d %d.\n", iteration, hwp.iteration);
 	runtime = (1000.0f * (endtime - starttime));
