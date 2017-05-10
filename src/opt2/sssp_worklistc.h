@@ -4,6 +4,8 @@
 
 #define AVGDEGREE	2.5
 #define WORKPERTHREAD	1
+
+
 //#define THRESHOLD 10000
 //#define DELTA 1000
 
@@ -327,7 +329,7 @@ void drelax(foru *dist, Graph& graph, unsigned *gerrno, Worklist2 &inwl1, Workli
 
 __global__ void drelax3(foru *dist, Graph graph, unsigned *gerrno, Worklist2 inwl1, Worklist2 inwl2, Worklist2 outwl1, Worklist2 outwl2, int iteration, GlobalBarrier gb, long unsigned base, long unsigned delta)
 {
-  drelax(dist, graph, gerrno, inwl1, inwl2, outwl1, outwl2, iteration);
+  drelax(dist, graph, gerrno, inwl1, inwl2, outwl1, outwl2, iteration, base, delta);
 }
 
 
@@ -383,7 +385,7 @@ __global__ void remove_dups(Worklist2 wl, int *node_owner, GlobalBarrier gb)
     }
 }
 
-void sssp(foru *hdist, foru *dist, Graph &graph, unsigned long totalcomm)
+void sssp(foru *hdist, foru *dist, Graph &graph, unsigned long totalcomm, unsigned long base, unsigned long delta)
 {
 	foru foruzero = 0.0;
 	unsigned int NBLOCKS, FACTOR = 128;
